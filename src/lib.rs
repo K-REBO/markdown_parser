@@ -3,6 +3,8 @@
 #![allow(unused_variables)]
 #![allow(unused_mut)]
 
+mod study_nom;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -37,16 +39,59 @@ Plain2"#
 
     #[test]
     fn is_work_span_field_from() {
-        let text = "ab[link](asdf)asd![this image](https://google.com)asdf".to_string();
+        // 🚧
+        let text =
+            "!Hello [aa](asdf) ![alt](https://img.example.com)[aa](bb)[aa](asdf)".to_string();
         let span = SpanField::from(text.to_string());
         println!("{:#?}", span);
+
+        todo!();
+    }
+
+    #[test]
+    fn append_child_test() {
+        let mut span = SpanField {
+            child: None,
+            span_type: SpanType::Root,
+        };
+        let child = SpanField {
+            child: None,
+            span_type: SpanType::PlainText("strong".to_string()),
+        };
+        let child2 = SpanField {
+            child: None,
+            span_type: SpanType::Link {
+                text: "text".to_string(),
+                href: "href".to_string(),
+            },
+        };
+        span.append_child(child);
+        span.append_child(child2);
+
+        let result = SpanField {
+            span_type: SpanType::Root,
+            child: Some(Box::new(SpanField {
+                span_type: SpanType::PlainText("strong".to_string()),
+                child: Some(Box::new(SpanField {
+                    child: None,
+                    span_type: SpanType::Link {
+                        text: "text".to_string(),
+                        href: "href".to_string(),
+                    },
+                })),
+            })),
+        };
+
+        println!("{:#?}", span);
+
+        assert_eq!(span, result);
     }
 }
 
 #[derive(Debug, PartialEq, Clone)]
 struct SpanField {
-    child: Option<Box<SpanField>>,
     span_type: SpanType,
+    child: Option<Box<SpanField>>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -91,46 +136,127 @@ enum BlockElm {
 
 #[derive(Debug, PartialEq, Clone)]
 enum SpanType {
-    Strong(String),
-    Italic(String),
-    Image { alt: String, src: String },
-    Link { text: String, href: String },
-    InlineCode(String),
-    StrikeThrough(String),
-    Highlight(String),
-    FootnoteReference { id: String },
+    Root,
+    Decoration {
+        // ✅
+        text: String,
+        is_strong: bool,
+        is_italic: bool,
+    },
+    Image {
+        alt: String,
+        src: String,
+    }, // ✅
+    Link {
+        text: String,
+        href: String,
+    }, // ✅
+    InlineCode(String),    // 🚧
+    StrikeThrough(String), // ✅
+    Highlight(String),     // ✅
+    FootnoteReference {
+        id: String,
+    }, // 🚧
     InlineHTML(String),
     PlainText(String),
 }
 
 mod parser {
+    use crate::SpanField;
+    use crate::SpanType;
 
     #[derive(Debug, PartialEq)]
-    struct Parsed<'a> {
-        left: &'a str,
-        span: &'a str,
-        right: &'a str,
+    pub struct Parsed {
+        pub left: String,
+        pub span: SpanField,
+        pub right: String,
     }
 
-    #[test]
-    fn strip_strong_test() {
-        let text = ["**strong**", "***strong***"];
-        let expected_result = [
-            Parsed {
-                left: "",
-                span: "strong",
-                right: "",
-            },
-            Parsed {
-                left: "",
-                span: "*strong*",
-                right: "",
-            },
-        ];
+    pub fn is_image(input: &str) -> bool {
+        let image_regex = regex::Regex::new(r"!\[.*\]\(.*\)").unwrap();
+        image_regex.is_match(input)
+    }
+    pub fn strip_image(input: &str) -> Parsed {
+        let left = input.chars().take_while(|c| *c != '!').collect::<String>();
 
-        for (i, t) in text.iter().enumerate() {
-            // let (_, result) = strip_strong(t).unwrap();
-            // assert_eq!(result, expected_result[i]);
+        let alt = input
+            .chars()
+            .skip_while(|c| *c != '!')
+            .skip_while(|c| *c != '[')
+            .skip(1)
+            .take_while(|c| *c != ']')
+            .collect::<String>();
+        let src = input
+            .chars()
+            .skip_while(|c| *c != '!')
+            .skip_while(|c| *c != '[')
+            .skip_while(|c| *c != ']')
+            .skip_while(|c| *c != '(')
+            .skip(1)
+            .take_while(|c| *c != ')')
+            .collect::<String>();
+
+        let right = input
+            .chars()
+            .skip_while(|c| *c != '!')
+            .skip_while(|c| *c != '[')
+            .skip_while(|c| *c != ']')
+            .skip_while(|c| *c != '(')
+            .skip_while(|c| *c != ')')
+            .skip(1)
+            .collect::<String>();
+
+        let left = left.to_string();
+        let right = right.to_string();
+
+        Parsed {
+            left: left,
+            span: SpanField {
+                child: None,
+                span_type: SpanType::Image { alt, src },
+            },
+            right: right,
+        }
+    }
+    pub fn is_link(input: &str) -> bool {
+        let link_regex = regex::Regex::new(r"\[.*\]\(.*\)").unwrap();
+        link_regex.is_match(input)
+    }
+    pub fn strip_link(input: &str) -> Parsed {
+        let left = input.chars().take_while(|c| *c != '[').collect::<String>();
+        let text = input
+            .chars()
+            .skip_while(|c| *c != '[')
+            .skip(1)
+            .take_while(|c| *c != ']')
+            .collect::<String>();
+        let href = input
+            .chars()
+            .skip_while(|c| *c != '[')
+            .skip_while(|c| *c != ']')
+            .skip_while(|c| *c != '(')
+            .skip(1)
+            .take_while(|c| *c != ')')
+            .collect::<String>();
+        let right = input
+            .chars()
+            .skip_while(|c| *c != '[')
+            .skip_while(|c| *c != ']')
+            .skip_while(|c| *c != '(')
+            .skip_while(|c| *c != ')')
+            .skip(1)
+            .collect::<String>();
+
+        let left = left.to_string();
+        let right = right.to_string();
+
+        Parsed {
+            left: left,
+            span: SpanField {
+                child: None,
+                span_type: SpanType::Link { text, href },
+            },
+            right: right,
         }
     }
 }
@@ -140,18 +266,63 @@ use nom::{Err, IResult};
 
 impl SpanField {
     pub fn from(text: String) -> SpanField {
-        let mut left_text: String;
-        let mut span_text: String;
-        let mut right_text: String;
+        let mut root_span = SpanField {
+            span_type: SpanType::Root,
+            child: None,
+        };
 
-        //detect strong
+        // detect image
 
-        todo!()
+        if text == "" {
+            return root_span;
+        } else if parser::is_image(text.as_str()) {
+            let parsed = parser::strip_image(text.as_str());
+            let left = SpanField::from(parsed.left);
+            let mut span = parsed.span;
+            let right = parsed.right;
+            let mut child = SpanField::from(right.to_string());
+            root_span.append_child(left);
+            root_span.append_child(span);
+            root_span.append_child(child);
+        } else if parser::is_link(text.as_str()) {
+            let parsed = parser::strip_link(text.as_str());
+            let left = SpanField::from(parsed.left);
+            let mut span = parsed.span;
+            let right = parsed.right;
+            let mut child = SpanField::from(right.to_string());
+            root_span.append_child(left);
+            root_span.append_child(span);
+            root_span.append_child(child);
+        } else {
+            //Plain
+            let span = SpanField {
+                span_type: SpanType::PlainText(text),
+                child: None,
+            };
+            root_span.append_child(span);
+        }
+        root_span
     }
 
     fn append_child(&mut self, child: SpanField) -> SpanField {
-        self.child = Some(Box::new(child));
-
+        match &mut self.child {
+            Some(c) => {
+                self.child.as_mut().unwrap().append_child(child);
+            }
+            None => {
+                /*
+                SpanField::fromの特性上、root_spanを使ってしまうことは仕方ない
+                けど、SpanType::RootがSpanField::fromを再帰的に呼び出す度に、
+                生まれるとツリー(SpanField)が見づらくなるので、もしChildがRootだったら剥く
+                ところで、荻窪に行きたい
+                 */
+                if child.span_type == SpanType::Root {
+                    self.child = child.child;
+                } else {
+                    self.child = Some(Box::new(child));
+                }
+            }
+        }
         self.clone()
     }
 }
@@ -203,7 +374,7 @@ impl BlockElm {
                     let indent_depth = line.chars().take_while(|c| *c == ' ').count() as u8;
                     let span = Box::new(SpanField {
                         child: None,
-                        span_type: SpanType::Strong(
+                        span_type: SpanType::PlainText(
                             line.chars().skip_while(|c| *c == ' ').collect(),
                         ),
                     });
