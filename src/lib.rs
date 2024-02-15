@@ -3,8 +3,7 @@
 #![allow(unused_variables)]
 #![allow(unused_mut)]
 
-mod study_nom;
-
+mod parser;
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -19,7 +18,7 @@ mod tests {
 > Quote
 Quote2
 
-[Link](https://www.example .com)
+[Link](https://www.example.com)
 
 **Strong**
 ![Image](https://www.example.com)
@@ -39,13 +38,10 @@ Plain2"#
 
     #[test]
     fn is_work_span_field_from() {
-        // 🚧
         let text =
             "!Hello [aa](asdf) ![alt](https://img.example.com)[aa](bb)[aa](asdf)".to_string();
         let span = SpanField::from(text.to_string());
         println!("{:#?}", span);
-
-        todo!();
     }
 
     #[test]
@@ -157,110 +153,11 @@ enum SpanType {
     FootnoteReference {
         id: String,
     }, // 🚧
-    InlineHTML(String),
-    PlainText(String),
+    InlineHTML(String),    // 🦺
+    PlainText(String),     // ✅
 }
 
-mod parser {
-    use crate::SpanField;
-    use crate::SpanType;
-
-    #[derive(Debug, PartialEq)]
-    pub struct Parsed {
-        pub left: String,
-        pub span: SpanField,
-        pub right: String,
-    }
-
-    pub fn is_image(input: &str) -> bool {
-        let image_regex = regex::Regex::new(r"!\[.*\]\(.*\)").unwrap();
-        image_regex.is_match(input)
-    }
-    pub fn strip_image(input: &str) -> Parsed {
-        let left = input.chars().take_while(|c| *c != '!').collect::<String>();
-
-        let alt = input
-            .chars()
-            .skip_while(|c| *c != '!')
-            .skip_while(|c| *c != '[')
-            .skip(1)
-            .take_while(|c| *c != ']')
-            .collect::<String>();
-        let src = input
-            .chars()
-            .skip_while(|c| *c != '!')
-            .skip_while(|c| *c != '[')
-            .skip_while(|c| *c != ']')
-            .skip_while(|c| *c != '(')
-            .skip(1)
-            .take_while(|c| *c != ')')
-            .collect::<String>();
-
-        let right = input
-            .chars()
-            .skip_while(|c| *c != '!')
-            .skip_while(|c| *c != '[')
-            .skip_while(|c| *c != ']')
-            .skip_while(|c| *c != '(')
-            .skip_while(|c| *c != ')')
-            .skip(1)
-            .collect::<String>();
-
-        let left = left.to_string();
-        let right = right.to_string();
-
-        Parsed {
-            left: left,
-            span: SpanField {
-                child: None,
-                span_type: SpanType::Image { alt, src },
-            },
-            right: right,
-        }
-    }
-    pub fn is_link(input: &str) -> bool {
-        let link_regex = regex::Regex::new(r"\[.*\]\(.*\)").unwrap();
-        link_regex.is_match(input)
-    }
-    pub fn strip_link(input: &str) -> Parsed {
-        let left = input.chars().take_while(|c| *c != '[').collect::<String>();
-        let text = input
-            .chars()
-            .skip_while(|c| *c != '[')
-            .skip(1)
-            .take_while(|c| *c != ']')
-            .collect::<String>();
-        let href = input
-            .chars()
-            .skip_while(|c| *c != '[')
-            .skip_while(|c| *c != ']')
-            .skip_while(|c| *c != '(')
-            .skip(1)
-            .take_while(|c| *c != ')')
-            .collect::<String>();
-        let right = input
-            .chars()
-            .skip_while(|c| *c != '[')
-            .skip_while(|c| *c != ']')
-            .skip_while(|c| *c != '(')
-            .skip_while(|c| *c != ')')
-            .skip(1)
-            .collect::<String>();
-
-        let left = left.to_string();
-        let right = right.to_string();
-
-        Parsed {
-            left: left,
-            span: SpanField {
-                child: None,
-                span_type: SpanType::Link { text, href },
-            },
-            right: right,
-        }
-    }
-}
-
+use crate::parser::parser::Parsed;
 use nom::character::complete::{char, multispace0, multispace1, none_of, space0};
 use nom::{Err, IResult};
 
@@ -271,37 +168,100 @@ impl SpanField {
             child: None,
         };
 
-        // detect image
-
+        /*
+         !TODO ここの処理一つにまとめれれる気がする
+         if let Ok() .......の繰り返しだから、関数を配列に入れて、forで回すとか
+        */
         if text == "" {
-            return root_span;
-        } else if parser::is_image(text.as_str()) {
-            let parsed = parser::strip_image(text.as_str());
-            let left = SpanField::from(parsed.left);
-            let mut span = parsed.span;
-            let right = parsed.right;
-            let mut child = SpanField::from(right.to_string());
+        } else if let Ok((input, parsed)) = parser::parser::parse_image(&text) {
+            let Parsed { left, span, right } = parsed;
+            let left = SpanField::from(left);
+            let right = SpanField::from(right);
+
             root_span.append_child(left);
             root_span.append_child(span);
-            root_span.append_child(child);
-        } else if parser::is_link(text.as_str()) {
-            let parsed = parser::strip_link(text.as_str());
-            let left = SpanField::from(parsed.left);
-            let mut span = parsed.span;
-            let right = parsed.right;
-            let mut child = SpanField::from(right.to_string());
+            root_span.append_child(right);
+        } else if let Ok((input, parsed)) = parser::parser::parse_link(&text) {
+            let Parsed { left, span, right } = parsed;
+            let left = SpanField::from(left);
+            let right = SpanField::from(right);
+
             root_span.append_child(left);
             root_span.append_child(span);
-            root_span.append_child(child);
+            root_span.append_child(right);
+        } else if let Ok((input, parsed)) = parser::parser::parse_strikethrough(&text) {
+            let Parsed { left, span, right } = parsed;
+            let left = SpanField::from(left);
+            let right = SpanField::from(right);
+
+            root_span.append_child(left);
+            root_span.append_child(span);
+            root_span.append_child(right);
+        } else if let Ok((input, parsed)) = parser::parser::parse_highlight(&text) {
+            let Parsed { left, span, right } = parsed;
+            let left = SpanField::from(left);
+            let right = SpanField::from(right);
+
+            root_span.append_child(left);
+            root_span.append_child(span);
+            root_span.append_child(right);
+        } else if let Ok((input, parsed)) = parser::parser::parse_strong_italic(&text) {
+            let Parsed { left, span, right } = parsed;
+            let left = SpanField::from(left);
+            let right = SpanField::from(right);
+
+            root_span.append_child(left);
+            root_span.append_child(span);
+            root_span.append_child(right);
+        } else if let Ok((input, parsed)) = parser::parser::parse_strong(&text) {
+            let Parsed { left, span, right } = parsed;
+            let left = SpanField::from(left);
+            let right = SpanField::from(right);
+
+            root_span.append_child(left);
+            root_span.append_child(span);
+            root_span.append_child(right);
+        } else if let Ok((input, parsed)) = parser::parser::parse_italic(&text) {
+            let Parsed { left, span, right } = parsed;
+            let left = SpanField::from(left);
+            let right = SpanField::from(right);
+
+            root_span.append_child(left);
+            root_span.append_child(span);
+            root_span.append_child(right);
+        } else if let Ok((input, parsed)) = parser::parser::parse_inline_code(&text) {
+            let Parsed { left, span, right } = parsed;
+            let left = SpanField::from(left);
+            let right = SpanField::from(right);
+
+            root_span.append_child(left);
+            root_span.append_child(span);
+            root_span.append_child(right);
+        } else if let Ok((input, parsed)) = parser::parser::parse_footnote_ref(&text) {
+            let Parsed { left, span, right } = parsed;
+            let left = SpanField::from(left);
+            let right = SpanField::from(right);
+
+            root_span.append_child(left);
+            root_span.append_child(span);
+            root_span.append_child(right);
         } else {
-            //Plain
             let span = SpanField {
                 span_type: SpanType::PlainText(text),
                 child: None,
             };
             root_span.append_child(span);
         }
-        root_span
+
+        return root_span.strip_root();
+    }
+    fn strip_root(&mut self) -> SpanField {
+        match &mut self.child {
+            Some(c) => return *self.clone().child.unwrap(),
+            None => {
+                return self.clone();
+            }
+        }
     }
 
     fn append_child(&mut self, child: SpanField) -> SpanField {
@@ -386,9 +346,13 @@ impl BlockElm {
                     ast.push(BlockElm::BlockQuote(span));
                     previous_block_type = BlockType::BlockQuote;
                 }
+                _ if line.is_empty() => {
+                    ast.push(BlockElm::Nothing);
+                }
                 _ => {
                     // classify SpanType
-                    let mut text = line.chars();
+                    let span = SpanField::from(line.to_string());
+                    ast.push(BlockElm::Span(span));
                 }
             }
         }

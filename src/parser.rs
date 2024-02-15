@@ -1,7 +1,8 @@
 #[cfg(test)]
 mod tests {
 
-    use crate::parser::Parsed;
+    use crate::parser::parser::Parsed;
+
     use crate::SpanField;
     use crate::SpanType;
     use nom::{Err, IResult};
@@ -11,7 +12,7 @@ mod tests {
         let inputs = ["L<div>text</div>R", "L<div><div>aaa</div></div>R"];
 
         for input in inputs.iter() {
-            let result = super::study_nom::parse_inline_html(input);
+            let result = super::parser::parse_inline_html(input);
             println!("{:#?}", result);
         }
 
@@ -20,7 +21,73 @@ mod tests {
 
     #[test]
     fn is_work_nested_italic_strong() {
-        todo!();
+        let inputs = ["***S+I***", "*I**Strong**I*", "**S*Italic*S**"];
+        let expected_results: [Parsed; 3] = [
+            Parsed {
+                left: "".to_string(),
+                span: SpanField {
+                    span_type: SpanType::Decoration {
+                        text: "S+I".to_string(),
+                        is_strong: true,
+                        is_italic: true,
+                    },
+                    child: None,
+                },
+                right: "".to_string(),
+            },
+            Parsed {
+                left: "".to_string(),
+                span: SpanField {
+                    span_type: SpanType::Decoration {
+                        text: "I".to_string(),
+                        is_strong: false,
+                        is_italic: true,
+                    },
+                    child: Some(Box::new(SpanField {
+                        span_type: SpanType::Decoration {
+                            text: "Strong".to_string(),
+                            is_strong: true,
+                            is_italic: false,
+                        },
+                        child: Some(Box::new(SpanField {
+                            span_type: SpanType::Decoration {
+                                text: "I".to_string(),
+                                is_strong: false,
+                                is_italic: true,
+                            },
+                            child: None,
+                        })),
+                    })),
+                },
+                right: "".to_string(),
+            },
+            Parsed {
+                left: "".to_string(),
+                span: SpanField {
+                    span_type: SpanType::Decoration {
+                        text: "S".to_string(),
+                        is_strong: true,
+                        is_italic: false,
+                    },
+                    child: Some(Box::new(SpanField {
+                        span_type: SpanType::Decoration {
+                            text: "Italic".to_string(),
+                            is_strong: false,
+                            is_italic: true,
+                        },
+                        child: Some(Box::new(SpanField {
+                            span_type: SpanType::Decoration {
+                                text: "S".to_string(),
+                                is_strong: true,
+                                is_italic: false,
+                            },
+                            child: None,
+                        })),
+                    })),
+                },
+                right: "".to_string(),
+            },
+        ];
     }
 
     #[test]
@@ -43,7 +110,7 @@ mod tests {
         ))];
 
         for (i, input) in inputs.iter().enumerate() {
-            let result = super::study_nom::parse_italic(input);
+            let result = super::parser::parse_italic(input);
             println!("{}", input);
             println!("{:#?}", result);
             assert_eq!(result, expected_results[i]);
@@ -70,7 +137,7 @@ mod tests {
         ))];
 
         for (i, input) in inputs.iter().enumerate() {
-            let result = super::study_nom::parse_strong(input);
+            let result = super::parser::parse_strong(input);
             println!("{}", input);
             println!("{:#?}", result);
             assert_eq!(result, expected_results[i]);
@@ -97,7 +164,7 @@ mod tests {
         ))];
 
         for (i, input) in inputs.iter().enumerate() {
-            let result = super::study_nom::parse_strong_italic(input);
+            let result = super::parser::parse_strong_italic(input);
             println!("{}", input);
             println!("{:#?}", result);
             assert_eq!(result, expected_results[i]);
@@ -108,7 +175,7 @@ mod tests {
     #[test]
     fn is_work_image() {
         let input = "aa![alt](https://img.example.com/image.jpg)bb![alt](link)";
-        let result = super::study_nom::parse_image(input);
+        let result = super::parser::parse_image(input);
 
         println!("{:#?}", result);
 
@@ -133,7 +200,7 @@ mod tests {
     #[test]
     fn is_work_link() {
         let input = "aa[link](https://example.com)bb![link](https://example.com)";
-        let result = super::study_nom::parse_link(input);
+        let result = super::parser::parse_link(input);
 
         println!("{:#?}", result);
 
@@ -158,7 +225,7 @@ mod tests {
     #[test]
     fn is_work_strikethrough() {
         let input = "aa~~text~~bb~~";
-        let result = super::study_nom::parse_strikethrough(input);
+        let result = super::parser::parse_strikethrough(input);
 
         println!("{:#?}", result);
 
@@ -180,7 +247,7 @@ mod tests {
     #[test]
     fn is_work_highlight() {
         let input = "aa==text==bb==";
-        let result = super::study_nom::parse_highlight(input);
+        let result = super::parser::parse_highlight(input);
 
         println!("{:#?}", result);
 
@@ -200,19 +267,23 @@ mod tests {
     }
 }
 
-mod study_nom {
+pub mod parser {
     use std::fmt::format;
 
+    use crate::SpanField;
+    use crate::SpanType;
     use nom::bytes::complete::{is_not, tag, take_until, take_while};
     use nom::character::complete::{
         char, digit1, multispace0, multispace1, none_of, space0, space1,
     };
     use nom::{Err, IResult};
 
-    use crate::parser::Parsed;
-
-    use crate::SpanField;
-    use crate::SpanType;
+    #[derive(Debug, PartialEq)]
+    pub struct Parsed {
+        pub left: String,
+        pub span: SpanField,
+        pub right: String,
+    }
 
     pub fn parse_image(input: &str) -> IResult<&str, Parsed> {
         let (input, left) = take_until("![")(input)?;
@@ -298,7 +369,6 @@ mod study_nom {
 
         return Ok((input, parsed));
     }
-
     pub fn parse_strong(input: &str) -> IResult<&str, Parsed> {
         let (input, left) = take_until("**")(input)?;
         let (input, _) = tag("**")(input)?;
@@ -320,7 +390,6 @@ mod study_nom {
 
         return Ok((input, parsed));
     }
-
     pub fn parse_italic(input: &str) -> IResult<&str, Parsed> {
         let (input, left) = take_until("*")(input)?;
         let (input, _) = tag("*")(input)?;
@@ -342,7 +411,6 @@ mod study_nom {
 
         return Ok((input, parsed));
     }
-
     pub fn parse_strong_italic(input: &str) -> IResult<&str, Parsed> {
         let (input, left) = take_until("***")(input)?;
         let (input, _) = tag("***")(input)?;
@@ -364,8 +432,7 @@ mod study_nom {
 
         return Ok((input, parsed));
     }
-
-    fn parse_inline_code(input: &str) -> IResult<&str, Parsed> {
+    pub fn parse_inline_code(input: &str) -> IResult<&str, Parsed> {
         let (input, left) = take_until("`")(input)?;
         let (input, _) = tag("`")(input)?;
         let (input, text) = take_until("`")(input)?;
@@ -382,7 +449,7 @@ mod study_nom {
 
         return Ok((input, parsed));
     }
-    fn parse_footnote_ref(input: &str) -> IResult<&str, Parsed> {
+    pub fn parse_footnote_ref(input: &str) -> IResult<&str, Parsed> {
         let (input, left) = take_until("[^")(input)?;
         let (input, _) = tag("[^")(input)?;
         let (input, text) = take_until("]")(input)?;
@@ -401,29 +468,15 @@ mod study_nom {
 
         return Ok((input, parsed));
     }
-
     pub fn parse_inline_html(input: &str) -> IResult<&str, Parsed> {
-        let mut span = String::new();
-
         let (input, left) = take_until("<")(input)?;
         let (input, _) = tag("<")(input)?;
         let (input, first_tag) = take_until(">")(input)?;
         let (input, _) = tag(">")(input)?;
         let (input, text) = take_until(format!("</{}", first_tag).as_str())(input)?;
-        span += text;
+        let mut span = text.to_string();
 
         let first_tag_count = text.split(format!("<{}>", first_tag).as_str()).count();
-
-        for mut i in 1..first_tag_count {
-            let (input, left) = take_until(format!("</{}>", first_tag).as_str())(input)?;
-            let (input, _) = tag(format!("</{}>", first_tag).as_str())(input)?;
-
-            span += format!("</{}>", first_tag).as_str();
-            let input = input
-                .to_string()
-                .replace(format!("</{}>", first_tag).as_str(), "")
-                .as_str();
-        }
 
         println!("first_tag: {}\ncount:{}", first_tag, first_tag_count);
 
