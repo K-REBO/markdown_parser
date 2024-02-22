@@ -1,9 +1,15 @@
 #![allow(dead_code)]
+#![allow(unused_assignments)]
 #![allow(unused_imports)]
 #![allow(unused_variables)]
 #![allow(unused_mut)]
+//TODO! These line will be removed when project is ready to be published;
+#![recursion_limit = "512"]
 
+mod blog;
 mod parser;
+mod render;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -90,7 +96,7 @@ struct SpanField {
     child: Option<Box<SpanField>>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 enum BlockElm {
     Span(SpanField),
     Heading {
@@ -127,7 +133,7 @@ enum BlockElm {
         header: Vec<String>,
         rows: Vec<Vec<String>>,
     },
-    Nothing,
+    LineBreak,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -299,28 +305,48 @@ impl BlockElm {
         let task_list_regex = regex::Regex::new(r"^\d+\. \[x\] ").unwrap();
         let footnote_definition_regex = regex::Regex::new(r"\[\^.*\]: ").unwrap();
 
+        #[derive(Debug, PartialEq)]
+        enum BlockType {
+            Heading,
+            OrderedList,
+            UnorderedList,
+            TaskList,
+            BlockQuote,
+            BlockCode,
+            FootnoteDefinition,
+            Table,
+            LineBreak,
+        }
+
+        let mut previous_block_type: BlockType = BlockType::LineBreak;
+
         for line in lines {
-            // let mut block_type: Option<BlockElm> = None;
-            #[derive(Debug, PartialEq)]
-            enum BlockType {
-                Heading,
-                OrderedList,
-                UnorderedList,
-                TaskList,
-                BlockQuote,
-                BlockCode,
-                FootnoteDefinition,
-                Table,
-                Nothing,
-            }
-
-            let mut previous_block_type: BlockType = BlockType::Nothing;
-
             // classify BlockElm
             match line {
+                _ if previous_block_type == BlockType::BlockCode => {
+                    if line.starts_with("```") {
+                        previous_block_type = BlockType::LineBreak;
+                        continue;
+                    }
+
+                    if let Some(BlockElm::BlockCode {
+                        lang,
+                        filename,
+                        code,
+                    }) = ast.pop()
+                    {
+                        let code = format!("{}\n{}", code, line);
+
+                        ast.push(BlockElm::BlockCode {
+                            lang,
+                            filename,
+                            code,
+                        });
+                    }
+                }
                 _ if line.starts_with("#") => {
                     let depth = line.chars().take_while(|c| *c == '#').count() as u8;
-                    let text = line.chars().skip_while(|c| *c == '#').collect();
+                    let text = line.chars().skip_while(|c| *c == '#').skip(1).collect();
                     ast.push(BlockElm::Heading { depth, text });
                     previous_block_type = BlockType::Heading;
                 }
@@ -346,16 +372,35 @@ impl BlockElm {
                     ast.push(BlockElm::BlockQuote(span));
                     previous_block_type = BlockType::BlockQuote;
                 }
+                _ if line.starts_with("```") => {
+                    let lang = line.chars().skip(3).collect();
+                    let filename = None;//TODO! filename
+                    let code = String::new();
+                    ast.push(BlockElm::BlockCode {
+                        lang,
+                        filename,
+                        code,
+                    });
+                    previous_block_type = BlockType::BlockCode;
+                }
                 _ if line.is_empty() => {
-                    ast.push(BlockElm::Nothing);
+                    ast.push(BlockElm::LineBreak);
+                    previous_block_type = BlockType::LineBreak;
                 }
                 _ => {
-                    // classify SpanType
-                    let span = SpanField::from(line.to_string());
-                    ast.push(BlockElm::Span(span));
+                    if previous_block_type == BlockType::BlockQuote {
+                        let span = Box::new(SpanField::from(line.to_string()));
+                        ast.push(BlockElm::BlockQuote(span));
+                    } else {
+                        let span = SpanField::from(line.to_string());
+                        ast.push(BlockElm::Span(span));
+                    }
                 }
             }
         }
+
+        println!("{:#?}", ast);
+
         ast
     }
 }

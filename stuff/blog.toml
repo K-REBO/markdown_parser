@@ -1,0 +1,2 @@
+[config]
+blog_file_path = "./src/{name}.html"

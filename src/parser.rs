@@ -8,18 +8,6 @@ mod tests {
     use nom::{Err, IResult};
 
     #[test]
-    fn playground() {
-        let inputs = ["L<div>text</div>R", "L<div><div>aaa</div></div>R"];
-
-        for input in inputs.iter() {
-            let result = super::parser::parse_inline_html(input);
-            println!("{:#?}", result);
-        }
-
-        todo!()
-    }
-
-    #[test]
     fn is_work_nested_italic_strong() {
         let inputs = ["***S+I***", "*I**Strong**I*", "**S*Italic*S**"];
         let expected_results: [Parsed; 3] = [
@@ -274,7 +262,7 @@ pub mod parser {
     use crate::SpanType;
     use nom::bytes::complete::{is_not, tag, take_until, take_while};
     use nom::character::complete::{
-        char, digit1, multispace0, multispace1, none_of, space0, space1,
+        char, digit1, none_of, space0, space1,
     };
     use nom::{Err, IResult};
 
@@ -477,8 +465,6 @@ pub mod parser {
         let mut span = text.to_string();
 
         let first_tag_count = text.split(format!("<{}>", first_tag).as_str()).count();
-
-        println!("first_tag: {}\ncount:{}", first_tag, first_tag_count);
 
         return Ok((
             input,

@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+:root {
+    --code-round-px: 0.5ex;
+}
+body {
+    font-family: 'Source Code Pro', monospace; 
+    font-size: x-small;
+}
+
+.sourceCodePro {
+    font-family: 'Source Code Pro', monospace; 
+    font-weight: 400;
+}
+.UbuntuMono {
+    font-family: 'Ubuntu Mono', monospace;
+    font-weight: 400;
+}
+.bold {
+    font-family: 'Source Code Pro', monospace; 
+    font-weight: 800;
+}
+.italic {
+    font-style: italic;
+}
+
+footer {
+    /* position: relative; */
+    position: absolute;
+    bottom: 0px;
+    margin-left: 2ex;
+    margin-bottom: 1ex;
+}
+
+.main-txt {
+    margin-left: 5ex;
+}
+
+code {
+    font-family: 'Source Code Pro', monospace; 
+    background-color: black;
+    color: white;
+    font-weight: 700;
+    padding: 0.3ex;
+    border-radius: 2px;
+}
+
+.code-bg {
+    /* font-family: 'Source Code Pro', monospace;  */
+    /* font-family: 'Ubuntu Mono',monospace; */
+    background-color: #030712;
+    /* width: fit-content; */
+    margin-top: 2ex;
+    color:white;
+    border-radius: var(--code-round-px);
+    padding-bottom: 1ex;
+    padding-left: 1ex;
+}
+
+.code-bg > .code-title {
+    /* margin: 1ex; */
+    padding: 0.3ex;
+    background-color: black;
+    color: white;
+    width: fit-content;
+    border-radius: var(--code-round-px) 0 var(--code-round-px) 0;
+}
+.code-bg > .code-copy_button {
+    padding: 0.3ex;
+    background-color: black;
+    color: white;
+    width: fit-content;
+    float: right;
+    border-radius: 0 var(--code-round-px) 0 var(--code-round-px);
+}
+
+.code-bg > .code-copy_button:hover {
+    background-color: #B2F7EF;
+    color: black;
+}
+
+a {
+    color:#0366d6;
+}
+a:hover {
+    text-decoration-line: underline;
+}
+
+.block-quote {
+    margin-left: 1ex;
+    margin-right: 1ex;
+    padding: 0.5ex;
+    border-left: 0.6ex solid #0366d6;
+    background-color: #f6f8fa;
+    border-radius: 0.2ex;
+}
